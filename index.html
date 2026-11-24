@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gigadat Thumbnail Maker</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --ink: #14161a;
+    --muted: #6b7280;
+    --line: #e4e6eb;
+    --accent: #2563eb;
+    --accent-ink: #ffffff;
+    --field: #f7f8fa;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1013; --panel: #16191e; --ink: #eef0f3; --muted: #9aa1ad;
+      --line: #262a31; --accent: #4d8dff; --accent-ink: #0b1220; --field: #1d2127;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  .app { display: grid; grid-template-columns: 392px minmax(0, 1fr); height: 100vh; }
+
+  /* ---------- left: controls ---------- */
+  .controls {
+    background: var(--panel); border-right: 1px solid var(--line);
+    overflow-y: auto; padding: 22px 20px 28px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .brand .dot { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(160deg,#EEA906,#713F12); }
+  .brand h1 { font-size: 16px; margin: 0; letter-spacing: -.01em; }
+  .brand p { margin: 0; color: var(--muted); font-size: 12px; }
+
+  section { padding: 16px 0; border-top: 1px solid var(--line); }
+  section:first-of-type { border-top: 0; padding-top: 0; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+
+  .tabs { display: flex; background: var(--field); border: 1px solid var(--line); border-radius: 9px; padding: 3px; margin-bottom: 12px; }
+  .tabs button {
+    flex: 1; border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 500;
+    padding: 6px 8px; border-radius: 7px; cursor: pointer;
+  }
+  .tabs button[aria-selected="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+
+  input[type="text"], input[type="number"] {
+    width: 100%; font: inherit; color: var(--ink); background: var(--field);
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; outline: none;
+  }
+  input:focus-visible, button:focus-visible, .drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  .status { min-height: 18px; }
+  .status.err { color: #d33b3b; }
+
+  .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 10px; max-height: 210px; overflow-y: auto; padding: 2px; }
+  .grid button {
+    aspect-ratio: 1; border: 1px solid var(--line); background: var(--field); border-radius: 8px;
+    color: var(--ink); cursor: pointer; padding: 7px; display: grid; place-items: center;
+  }
+  .grid button:hover { border-color: var(--muted); }
+  .grid button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+  .grid svg { width: 100%; height: 100%; }
+
+  .drop {
+    display: grid; place-items: center; text-align: center; gap: 2px; padding: 22px 12px;
+    border: 1.5px dashed var(--line); border-radius: var(--radius); background: var(--field);
+    cursor: pointer; color: var(--muted);
+  }
+  .drop.over { border-color: var(--accent); color: var(--ink); }
+  .drop strong { color: var(--ink); font-weight: 600; }
+
+  .picked { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .picked .chip { width: 38px; height: 38px; border-radius: 8px; background: #222; color: #fff; display: grid; place-items: center; flex: none; }
+  .picked .chip svg { width: 26px; height: 26px; }
+  .picked b { color: var(--ink); font-weight: 600; display: block; }
+
+  .swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .swatch {
+    width: 34px; height: 34px; border-radius: 9px; border: 2px solid transparent; cursor: pointer; padding: 0;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.18);
+  }
+  .swatch[aria-pressed="true"] { border-color: var(--ink); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .color { display: flex; align-items: center; gap: 8px; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+  .color input[type="color"] { width: 28px; height: 28px; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 6px; }
+  .color label { display: block; font-size: 11px; color: var(--muted); }
+  .color code { font-size: 12px; color: var(--ink); }
+
+  .slider { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
+  .slider output { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+  .size { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: end; }
+  .size label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 4px; }
+  .size .x { padding-bottom: 9px; color: var(--muted); }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+  .presets button, .btn-sec {
+    font: inherit; font-size: 12px; background: var(--field); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 10px; cursor: pointer;
+  }
+  .presets button:hover, .btn-sec:hover { border-color: var(--muted); }
+  .btn {
+    width: 100%; font: inherit; font-weight: 600; background: var(--accent); color: var(--accent-ink);
+    border: 0; border-radius: 9px; padding: 11px 14px; cursor: pointer;
+  }
+  .btn:hover { filter: brightness(1.06); }
+  .btn:disabled { opacity: .6; cursor: progress; }
+
+  /* ---------- right: preview ---------- */
+  .stage { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px; min-width: 0; gap: 14px; }
+  .frame {
+    width: min(100%, calc((100vh - 120px) * 4 / 3)); aspect-ratio: 4 / 3; border-radius: 6px; overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 18px 50px -12px rgba(0,0,0,.35);
+    background: #888;
+  }
+  .frame svg { display: block; width: 100%; height: 100%; }
+  .caption { color: var(--muted); font-size: 12px; }
+
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; height: auto; }
+    .controls { border-right: 0; border-top: 1px solid var(--line); order: 2; overflow: visible; }
+    .stage { order: 1; padding: 16px; }
+    .frame { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===================== controls ===================== -->
+  <aside class="controls">
+    <div class="brand">
+      <div class="dot" aria-hidden="true"></div>
+      <div><h1>Thumbnail Maker</h1><p>Gigadat blog thumbnails</p></div>
+    </div>
+
+    <section>
+      <h2>1 · Icon</h2>
+      <div class="tabs" role="tablist">
+        <button role="tab" id="tab-describe" aria-selected="true" aria-controls="pane-describe">Describe</button>
+        <button role="tab" id="tab-upload" aria-selected="false" aria-controls="pane-upload">Upload SVG</button>
+      </div>
+
+      <div id="pane-describe" role="tabpanel" aria-labelledby="tab-describe">
+        <input type="text" id="query" value="warning" placeholder="e.g. shield, credit card, cloud upload" autocomplete="off" aria-label="Describe an icon">
+        <p class="hint status" id="search-status" role="status"></p>
+        <div class="grid" id="results" aria-label="Icon results"></div>
+      </div>
+
+      <div id="pane-upload" role="tabpanel" aria-labelledby="tab-upload" hidden>
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="Upload an SVG file">
+          <strong>Drop an SVG here</strong>
+          <span>or click to choose a file</span>
+        </div>
+        <input type="file" id="file" accept=".svg,image/svg+xml" hidden>
+        <p class="hint status" id="upload-status" role="status">Solid (filled) icons work best. Colours are replaced by the glass treatment.</p>
+      </div>
+
+      <div class="picked">
+        <div class="chip" id="picked-chip" aria-hidden="true"></div>
+        <div><b id="picked-name">Warning</b><span id="picked-source">Material Icons · Round (filled)</span></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>2 · Colour</h2>
+      <div class="swatches" id="swatches" role="group" aria-label="Colour presets"></div>
+      <div class="row">
+        <div class="color"><input type="color" id="c-top" value="#EEA906" aria-label="Top colour"><div><label for="c-top">Top</label><code id="c-top-v">#EEA906</code></div></div>
+        <div class="color"><input type="color" id="c-bot" value="#713F12" aria-label="Bottom colour"><div><label for="c-bot">Bottom glow</label><code id="c-bot-v">#713F12</code></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>3 · Icon size</h2>
+      <div class="slider">
+        <input type="range" id="size" min="40" max="170" step="1" value="85" aria-label="Icon size">
+        <output id="size-out">27%</output>
+      </div>
+    </section>
+
+    <section>
+      <h2>4 · Export PNG</h2>
+      <div class="size">
+        <div><label for="w">Width (px)</label><input type="number" id="w" min="16" max="8000" value="1200"></div>
+        <div class="x" aria-hidden="true">×</div>
+        <div><label for="h">Height (px)</label><input type="number" id="h" min="12" max="6000" value="900"></div>
+      </div>
+      <p class="hint">Locked to the template’s 4:3 ratio — change either side and the other scales with it.</p>
+      <div class="presets" id="presets"></div>
+      <button class="btn" id="download">Download PNG</button>
+      <p class="hint status" id="export-status" role="status"></p>
+    </section>
+  </aside>
+
+  <!-- ===================== preview ===================== -->
+  <main class="stage">
+    <div class="frame" id="frame" aria-label="Live thumbnail preview"></div>
+    <div class="caption" id="caption"></div>
+  </main>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   Template constants — taken from the Figma frame "1" (CMS Templates, node 1212:15305)
+   Frame 310.5 × 232.875 (4:3). Flat base colour + blurred ellipse + glass icon
+   (white @10% fill with five stacked white drop-shadows).
+   ============================================================ */
+const FW = 310.5, FH = 232.875;
+const ASPECT = FH / FW;                     // 0.75
+const DEFAULT_ICON = 85;                    // glyph width in the template (px of the 310.5 frame)
+// Figma applies a progressive layer blur (radius 100) here; a uniform sigma of 38 reproduces its rendered gradient
+// to within ~3/255 (calibrated by sampling the Figma render), so we use that.
+const BLOB = { cx: 153.911, cy: 300, rx: 279.269, ry: 168.928, blur: 38 };
+const SHADOWS = [                           // dx = dy, blur stdDeviation, white alpha
+  { d: 1,  s: 2,   a: 0.39 },
+  { d: 6,  s: 4,   a: 0.34 },
+  { d: 13, s: 5.5, a: 0.20 },
+  { d: 23, s: 6.5, a: 0.06 },
+  { d: 35, s: 7,   a: 0.01 },
+];
+// Figma "Glass" effect (radius 4, refraction .8, depth 20, light -45°, intensity .8) is not exportable to SVG,
+// so it is emulated: translucent body + soft inner bevel glow + thin rim light. Values are in template frame units.
+const GLASS = { bodyA: 0.1, glowW: 2.2, glowBlur: 1.1, glowA: 0.35, rimW: 0.6, rimMid: "#9a9a9a", rimEnd: "#e8e8e8" };
+const PRESETS = [
+  { name: "Amber (template)", top: "#EEA906", bot: "#713F12" },
+  { name: "Blue",    top: "#3B82F6", bot: "#1E3A8A" },
+  { name: "Cyan",    top: "#06B6D4", bot: "#164E63" },
+  { name: "Emerald", top: "#10B981", bot: "#064E3B" },
+  { name: "Orange",  top: "#F97316", bot: "#7C2D12" },
+  { name: "Red",     top: "#EF4444", bot: "#7F1D1D" },
+  { name: "Pink",    top: "#EC4899", bot: "#831843" },
+  { name: "Violet",  top: "#8B5CF6", bot: "#4C1D95" },
+  { name: "Slate",   top: "#64748B", bot: "#0F172A" },
+];
+const EXPORT_PRESETS = [[622, "311 × 233 · 2×"], [1200, "1200"], [1600, "1600"], [2400, "2400"], [3200, "3200"]];
+
+/* ---------- tiny helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const num = (n) => +n.toFixed(3);
+
+/* ============================================================
+   SVG sanitising / normalising
+   Turns any SVG string into { viewBox:[x,y,w,h], inner, stroke } where `inner`
+   has all colours stripped, ready to be painted by the glass treatment.
+   ============================================================ */
+const SHAPES = new Set(["path", "circle", "ellipse", "rect", "polygon", "polyline", "line"]);
+const DROP_TAGS = new Set(["script", "foreignobject", "style", "title", "desc", "metadata", "image", "animate", "animatetransform", "set", "iframe"]);
+
+function parseSvg(text) {
+  const doc = new DOMParser().parseFromString(text, "image/svg+xml");
+  const root = doc.documentElement;
+  if (!root || root.nodeName.toLowerCase() !== "svg" || doc.querySelector("parsererror")) {
+    throw new Error("That doesn’t look like a valid SVG file.");
+  }
+  // viewBox
+  let vb = (root.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
+  if (vb.length !== 4 || vb.some((n) => !isFinite(n)) || vb[2] <= 0 || vb[3] <= 0) {
+    const w = parseFloat(root.getAttribute("width")), h = parseFloat(root.getAttribute("height"));
+    vb = [0, 0, isFinite(w) && w > 0 ? w : 24, isFinite(h) && h > 0 ? h : 24];
+  }
+  const rootFillNone = (root.getAttribute("fill") || "").toLowerCase() === "none";
+
+  // strip anything executable / external
+  [...root.querySelectorAll("*")].forEach((el) => {
+    if (DROP_TAGS.has(el.localName.toLowerCase())) { el.remove(); return; }
+    [...el.attributes].forEach((a) => {
+      const n = a.name.toLowerCase();
+      if (n.startsWith("on") || n === "style" || n === "class") el.removeAttribute(a.name);
+      if ((n === "href" || n === "xlink:href") && !a.value.trim().startsWith("#")) el.removeAttribute(a.name);
+    });
+  });
+
+  // stroke-style icon? (fill none + strokes)
+  const anyStroke = [root, ...root.querySelectorAll("[stroke]")].some((e) => (e.getAttribute("stroke") || "").toLowerCase() !== "none");
+  const anyFilled = [...root.querySelectorAll("path,circle,ellipse,rect,polygon")].some((e) => {
+    const f = (e.getAttribute("fill") || "").toLowerCase();
+    return f && f !== "none";
+  });
+  const strokeIcon = anyStroke && (rootFillNone || !anyFilled);
+
+  const inDefs = (el) => !!el.closest("defs,clipPath,mask,symbol,pattern");
+  [...root.querySelectorAll("*")].forEach((el) => {
+    if (inDefs(el) && !el.matches("defs,clipPath,mask,symbol,pattern")) return;
+    const tag = el.localName.toLowerCase();
+    if (SHAPES.has(tag)) {
+      const fill = (el.getAttribute("fill") || "").toLowerCase();
+      const stroke = (el.getAttribute("stroke") || "").toLowerCase();
+      const parentFillNone = !!el.closest('g[fill="none"]');
+      // invisible helper shapes (e.g. <path fill="none" d="M0 0h24v24H0z"/>)
+      if (!strokeIcon && (fill === "none" || (parentFillNone && !fill)) ) { el.remove(); return; }
+      if (strokeIcon && fill === "none" && (!stroke || stroke === "none") && !el.closest("[stroke]")) { el.remove(); return; }
+    }
+    el.removeAttribute("fill"); el.removeAttribute("fill-opacity");
+    el.removeAttribute("stroke"); el.removeAttribute("stroke-opacity");
+    if (!strokeIcon) el.removeAttribute("stroke-width");
+  });
+
+  return { viewBox: vb, inner: root.innerHTML, stroke: strokeIcon, strokeWidth: root.getAttribute("stroke-width"),
+           linecap: root.getAttribute("stroke-linecap"), linejoin: root.getAttribute("stroke-linejoin") };
+}
+
+/* Wrap a parsed icon in the paint group (fill/stroke white @10 %). */
+function paintGroup(icon, a = 0.1) {
+  const sw = icon.stroke ? ` stroke="#fff" stroke-opacity="${a}" fill="none" stroke-width="${esc(icon.strokeWidth || 2)}" stroke-linecap="${esc(icon.linecap || "round")}" stroke-linejoin="${esc(icon.linejoin || "round")}"`
+                         : ` fill="#fff" fill-opacity="${a}"`;
+  return `<g${sw}>${icon.inner}</g>`;
+}
+
+/* Measure the true ink bounds of an icon (viewBox units). */
+const measurer = (() => {
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("width", "100"); svg.setAttribute("height", "100");
+  svg.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none";
+  document.body.appendChild(svg);
+  return svg;
+})();
+function measure(icon) {
+  measurer.innerHTML = `<g>${icon.inner}</g>`;
+  try {
+    const b = measurer.firstChild.getBBox();
+    measurer.innerHTML = "";
+    if (b.width > 0 && b.height > 0) return { x: b.x, y: b.y, w: b.width, h: b.height };
+  } catch (e) { measurer.innerHTML = ""; }
+  return { x: icon.viewBox[0], y: icon.viewBox[1], w: icon.viewBox[2], h: icon.viewBox[3] };
+}
+
+/* ============================================================
+   Thumbnail SVG builder (used for preview AND for PNG export)
+   ============================================================ */
+function buildSvg(state, outW, outH, idp = "t") {
+  const b = state.bbox;
+  const s = state.size / Math.max(b.w, b.h);          // fit icon's longest side to `size`
+  const k = state.size / DEFAULT_ICON;                // scale shadow stack + glass details with the icon
+  const cx = FW / 2, cy = FH / 2;
+  const iw = b.w * s, ih = b.h * s;
+  const left = cx - iw / 2, top = cy - ih / 2;
+  const local = (frameUnits) => num((frameUnits * k) / s);   // frame units -> icon-local units
+  const id = (n) => `${idp}-${n}`;
+
+  /* ---- background: flat colour + blurred ellipse ---- */
+  let defs = `<clipPath id="${id("clip")}"><rect width="${FW}" height="${FH}"/></clipPath>` +
+    `<filter id="${id("bg")}" x="-400" y="-300" width="1100" height="1000" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="${BLOB.blur}"/></filter>`;
+  const blobLayers = `<g filter="url(#${id("bg")})"><ellipse cx="${BLOB.cx}" cy="${BLOB.cy}" rx="${BLOB.rx}" ry="${BLOB.ry}" fill="${state.bot}"/></g>`;
+
+  /* ---- glass icon ---- */
+  // 1) white drop-shadow stack (Figma: 5 white shadows, "show behind node") — wraps the whole glass icon
+  let chain = "", prev = "BackgroundImageFix";
+  SHADOWS.forEach((sh, i) => {
+    const out = `e${i + 1}`;
+    chain += `<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>` +
+             `<feOffset dx="${num(sh.d * k)}" dy="${num(sh.d * k)}"/><feGaussianBlur stdDeviation="${num(sh.s * k)}"/>` +
+             `<feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 ${sh.a} 0"/>` +
+             `<feBlend mode="normal" in2="${prev}" result="${out}"/>`;
+    prev = out;
+  });
+  chain += `<feBlend mode="normal" in="SourceGraphic" in2="${prev}" result="shape"/>`;
+  const pad = 12 * k, reach = 35 * k + 24 * k;
+  defs += `<filter id="${id("fx")}" x="${num(left - pad)}" y="${num(top - pad)}" width="${num(iw + pad + reach)}" height="${num(ih + pad + reach)}" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/>${chain}</filter>`;
+
+  // 2) glass: soft inner bevel glow + crisp rim light (alpha minus eroded alpha), emulating Figma's Glass effect
+  // Rescale the 10 %-alpha body to full alpha *linearly* so anti-aliased edges survive (a hard x127 clamp makes the rim beaded).
+  const A = `<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 ${num(1 / GLASS.bodyA)} 0" result="A"/>`;
+  defs += `<filter id="${id("glow")}" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">${A}` +
+          `<feMorphology in="A" operator="erode" radius="${local(GLASS.glowW)}" result="E"/><feComposite in="A" in2="E" operator="out" result="band"/>` +
+          `<feGaussianBlur in="band" stdDeviation="${local(GLASS.glowBlur)}" result="soft"/><feComposite in="soft" in2="A" operator="in" result="inside"/>` +
+          `<feColorMatrix in="inside" type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 ${GLASS.glowA} 0"/></filter>`;
+  defs += `<filter id="${id("rim")}" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">${A}` +
+          `<feMorphology in="A" operator="erode" radius="${local(GLASS.rimW)}" result="E"/><feComposite in="A" in2="E" operator="out" result="edge"/>` +
+          `<feColorMatrix in="edge" type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0"/></filter>`;
+  // light comes from -45° (top-left); rim is strongest top-left, weaker mid, strong again bottom/right
+  defs += `<linearGradient id="${id("lg")}" gradientUnits="userSpaceOnUse" x1="${num(left)}" y1="${num(top)}" x2="${num(left + iw)}" y2="${num(top + ih)}">` +
+          `<stop offset="0" stop-color="#fff"/><stop offset="0.5" stop-color="${GLASS.rimMid}"/><stop offset="1" stop-color="${GLASS.rimEnd}"/></linearGradient>` +
+          `<mask id="${id("lm")}" maskUnits="userSpaceOnUse" x="${num(left - 4)}" y="${num(top - 4)}" width="${num(iw + 8)}" height="${num(ih + 8)}"><rect x="${num(left - 4)}" y="${num(top - 4)}" width="${num(iw + 8)}" height="${num(ih + 8)}" fill="url(#${id("lg")})"/></mask>`;
+  defs += `<g id="${id("ic")}">${paintGroup(state.icon, GLASS.bodyA)}</g>`;
+
+  const T = `translate(${cx} ${cy}) scale(${num(s)}) translate(${num(-(b.x + b.w / 2))} ${num(-(b.y + b.h / 2))})`;
+  return `<svg xmlns="${NS}" xmlns:xlink="http://www.w3.org/1999/xlink" width="${outW}" height="${outH}" viewBox="0 0 ${FW} ${FH}" fill="none">
+<defs>${defs}</defs>
+<g clip-path="url(#${id("clip")})">
+<rect width="${FW}" height="${FH}" fill="${state.top}"/>
+${blobLayers}
+<g filter="url(#${id("fx")})">
+<g transform="${T}"><use href="#${id("ic")}" xlink:href="#${id("ic")}"/><use href="#${id("ic")}" xlink:href="#${id("ic")}" filter="url(#${id("glow")})"/></g>
+<g mask="url(#${id("lm")})"><g transform="${T}"><use href="#${id("ic")}" xlink:href="#${id("ic")}" filter="url(#${id("rim")})"/></g></g>
+</g>
+</g>
+</svg>`;
+}
+
+/* ============================================================
+   State + rendering
+   ============================================================ */
+// Offline fallback so the page works before the icon API answers (Material Icons Round "warning").
+const FALLBACK = {
+  viewBox: [0, 0, 24, 24], stroke: false,
+  inner: '<path d="M4.47 21h15.06c1.54 0 2.5-1.67 1.73-3L13.73 4.99c-.77-1.33-2.69-1.33-3.46 0L2.74 18c-.77 1.33.19 3 1.73 3M12 14c-.55 0-1-.45-1-1v-2c0-.55.45-1 1-1s1 .45 1 1v2c0 .55-.45 1-1 1m1 4h-2v-2h2z"/>',
+};
+const state = {
+  icon: FALLBACK, bbox: null, name: "warning", source: "Material Icons · Round (filled)",
+  top: "#EEA906", bot: "#713F12", size: DEFAULT_ICON, w: 1200, h: 900,
+};
+state.bbox = measure(state.icon);
+
+function render() {
+  $("frame").innerHTML = buildSvg(state, "100%", "100%", "pv");
+  $("caption").textContent = `Live preview · exports at ${state.w} × ${state.h} px`;
+  $("size-out").textContent = Math.round((state.size / FW) * 100) + "%";
+  $("c-top-v").textContent = state.top.toUpperCase();
+  $("c-bot-v").textContent = state.bot.toUpperCase();
+  document.querySelectorAll(".swatch").forEach((b) => {
+    const p = PRESETS[+b.dataset.i];
+    b.setAttribute("aria-pressed", String(p.top.toLowerCase() === state.top.toLowerCase() && p.bot.toLowerCase() === state.bot.toLowerCase()));
+  });
+  $("picked-name").textContent = state.name;
+  $("picked-source").textContent = state.source;
+  $("picked-chip").innerHTML = `<svg viewBox="${state.icon.viewBox.join(" ")}"><g fill="currentColor">${state.icon.inner}</g></svg>`;
+}
+
+function setIcon(icon, name, source) {
+  state.icon = icon; state.bbox = measure(icon); state.name = name; state.source = source;
+  render();
+}
+
+/* ---------- colours ---------- */
+PRESETS.forEach((p, i) => {
+  const b = document.createElement("button");
+  b.className = "swatch"; b.dataset.i = i; b.title = p.name; b.setAttribute("aria-label", p.name);
+  b.style.background = `linear-gradient(180deg, ${p.top} 0%, ${p.top} 45%, ${p.bot} 100%)`;
+  b.onclick = () => { state.top = p.top; state.bot = p.bot; $("c-top").value = p.top; $("c-bot").value = p.bot; render(); };
+  $("swatches").appendChild(b);
+});
+$("c-top").oninput = (e) => { state.top = e.target.value; render(); };
+$("c-bot").oninput = (e) => { state.bot = e.target.value; render(); };
+$("size").oninput = (e) => { state.size = +e.target.value; render(); };
+
+/* ---------- tabs ---------- */
+function selectTab(which) {
+  const d = which === "describe";
+  $("tab-describe").setAttribute("aria-selected", d); $("tab-upload").setAttribute("aria-selected", !d);
+  $("pane-describe").hidden = !d; $("pane-upload").hidden = d;
+}
+$("tab-describe").onclick = () => selectTab("describe");
+$("tab-upload").onclick = () => selectTab("upload");
+
+/* ============================================================
+   Icon search — Iconify API (Material Icons "Round" + Material Symbols "Rounded", filled)
+   ============================================================ */
+const API = "https://api.iconify.design";
+const STOP = new Set(["a", "an", "the", "of", "with", "for", "and", "icon", "icons", "symbol", "image", "picture", "showing", "that", "is", "like"]);
+const SYN = { padlock: "lock", gear: "settings", cog: "settings", trash: "delete", bin: "delete", magnifier: "search", magnifying: "search",
+  envelope: "mail", email: "email", cloud: "cloud", money: "payments", dollar: "attach-money", cash: "payments", chart: "bar-chart", graph: "show-chart",
+  person: "person", people: "group", team: "group", user: "person", bell: "notifications", alert: "warning", danger: "warning", caution: "warning",
+  home: "home", house: "home", phone: "phone", mobile: "smartphone", laptop: "laptop", computer: "computer", server: "dns", database: "storage",
+  code: "code", bug: "bug-report", shield: "shield", security: "security", key: "key", fingerprint: "fingerprint", wifi: "wifi", network: "lan",
+  rocket: "rocket-launch", idea: "lightbulb", bulb: "lightbulb", target: "gps-fixed", flag: "flag", star: "star", heart: "favorite", like: "thumb-up",
+  time: "schedule", clock: "schedule", calendar: "calendar-month", document: "description", file: "description", folder: "folder", link: "link",
+  card: "credit-card", bank: "account-balance", invoice: "receipt-long", tick: "check", checkmark: "check", cross: "close", ai: "auto-awesome", robot: "smart-toy" };
+
+let searchSeq = 0;
+const cache = new Map();   // "prefix:name" -> parsed icon
+
+const norm = (n, prefix) => prefix === "ic" ? n.replace(/^round-/, "") : n.replace(/-rounded$/, "");
+const wanted = (n, prefix) => prefix === "ic" ? n.startsWith("round-") && !/outline|twotone/.test(n)
+                                                 : n.endsWith("-rounded") && !n.includes("outline");
+
+async function searchPrefix(prefix, q) {
+  const r = await fetch(`${API}/search?query=${encodeURIComponent(q)}&prefix=${prefix}&limit=200`);
+  if (!r.ok) throw new Error("search failed");
+  const j = await r.json();
+  return (j.icons || []).map((full) => full.split(":")[1]).filter((n) => wanted(n, prefix)).map((n) => ({ prefix, raw: n, base: norm(n, prefix) }));
+}
+
+async function findIcons(text) {
+  let toks = text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t && !STOP.has(t));
+  if (!toks.length) return [];
+  const terms = new Set([toks.join(" ")]);
+  toks.forEach((t) => {
+    terms.add(SYN[t] ? SYN[t].replace(/-/g, " ") : t);
+    if (t.length > 3 && t.endsWith("s")) terms.add(t.slice(0, -1));
+  });
+  const jobs = [];
+  [...terms].slice(0, 6).forEach((t) => ["ic", "material-symbols"].forEach((p) => jobs.push(searchPrefix(p, t).catch(() => []))));
+  const all = (await Promise.all(jobs)).flat();
+  const wantSyn = toks.map((t) => (SYN[t] || t).replace(/-/g, " "));
+  const joined = toks.join("-");
+  const seen = new Map();
+  for (const it of all) {
+    const prev = seen.get(it.base);
+    if (prev && !(prev.prefix !== "ic" && it.prefix === "ic")) continue;   // de-dupe, prefer classic Material Icons
+    const words = it.base.split("-");
+    let score = 0;
+    toks.forEach((t, i) => {
+      if (words.includes(t) || it.base.includes(t)) score += 10;
+      else if (it.base.includes(wantSyn[i].replace(/ /g, "-"))) score += 8;
+    });
+    if (it.base === joined || toks.some((t, i) => it.base === (SYN[t] || t))) score += 40;
+    score -= it.base.length * 0.15;
+    seen.set(it.base, { ...it, score });
+  }
+  return [...seen.values()].sort((a, b) => b.score - a.score).slice(0, 48);
+}
+
+async function loadBodies(items) {
+  for (const prefix of ["ic", "material-symbols"]) {
+    const need = items.filter((i) => i.prefix === prefix && !cache.has(`${prefix}:${i.raw}`));
+    if (!need.length) continue;
+    const r = await fetch(`${API}/${prefix}.json?icons=${need.map((i) => i.raw).join(",")}`);
+    if (!r.ok) throw new Error("icon fetch failed");
+    const j = await r.json();
+    for (const i of need) {
+      const d = j.icons && j.icons[i.raw];
+      if (!d) continue;
+      const w = d.width || j.width || 24, h = d.height || j.height || 24;
+      try {
+        cache.set(`${prefix}:${i.raw}`, parseSvg(`<svg xmlns="${NS}" viewBox="0 0 ${w} ${h}">${d.body}</svg>`));
+      } catch (e) { /* skip bad icon */ }
+    }
+  }
+}
+
+function sourceLabel(prefix) { return prefix === "ic" ? "Material Icons · Round (filled)" : "Material Symbols · Rounded (filled)"; }
+function prettyName(base) { return base.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase()); }
+
+function showResults(items) {
+  const box = $("results"); box.innerHTML = "";
+  items.forEach((it) => {
+    const icon = cache.get(`${it.prefix}:${it.raw}`);
+    if (!icon) return;
+    const b = document.createElement("button");
+    b.title = prettyName(it.base); b.setAttribute("aria-label", prettyName(it.base));
+    b.setAttribute("aria-pressed", String(state.name === prettyName(it.base)));
+    b.innerHTML = `<svg viewBox="${icon.viewBox.join(" ")}"><g fill="currentColor">${icon.inner}</g></svg>`;
+    b.onclick = () => {
+      box.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+      setIcon(icon, prettyName(it.base), sourceLabel(it.prefix));
+    };
+    box.appendChild(b);
+  });
+}
+
+async function runSearch(autoPick) {
+  const q = $("query").value.trim(), seq = ++searchSeq, st = $("search-status");
+  st.classList.remove("err");
+  if (!q) { st.textContent = ""; $("results").innerHTML = ""; return; }
+  st.textContent = "Searching Material icons…";
+  try {
+    const items = await findIcons(q);
+    if (seq !== searchSeq) return;
+    if (!items.length) { st.textContent = "No icons found — try a simpler word (e.g. “lock”, “chart”, “mail”)."; $("results").innerHTML = ""; return; }
+    await loadBodies(items);
+    if (seq !== searchSeq) return;
+    const ready = items.filter((i) => cache.has(`${i.prefix}:${i.raw}`));
+    showResults(ready);
+    st.textContent = `${ready.length} filled, rounded icons — click one to use it.`;
+    if (autoPick && ready.length) {
+      const top = ready[0];
+      setIcon(cache.get(`${top.prefix}:${top.raw}`), prettyName(top.base), sourceLabel(top.prefix));
+      $("results").querySelector("button")?.setAttribute("aria-pressed", "true");
+    }
+  } catch (e) {
+    if (seq !== searchSeq) return;
+    st.classList.add("err");
+    st.textContent = "Couldn’t reach the icon library. Check your connection, or switch to “Upload SVG”.";
+  }
+}
+let t;
+$("query").addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => runSearch(true), 380); });
+$("query").addEventListener("keydown", (e) => { if (e.key === "Enter") { clearTimeout(t); runSearch(true); } });
+
+/* ============================================================
+   SVG upload
+   ============================================================ */
+function handleFile(f) {
+  const st = $("upload-status"); st.classList.remove("err");
+  if (!f) return;
+  if (f.size > 2 * 1024 * 1024) { st.classList.add("err"); st.textContent = "That file is over 2 MB — please use a simpler SVG."; return; }
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const icon = parseSvg(String(rd.result));
+      setIcon(icon, f.name.replace(/\.svg$/i, ""), "Uploaded SVG");
+      st.textContent = `Loaded “${f.name}”.`;
+    } catch (e) { st.classList.add("err"); st.textContent = e.message; }
+  };
+  rd.readAsText(f);
+}
+const drop = $("drop");
+drop.onclick = () => $("file").click();
+drop.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } };
+$("file").onchange = (e) => { handleFile(e.target.files[0]); e.target.value = ""; };
+["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => handleFile(e.dataTransfer.files[0]));
+
+/* ============================================================
+   Export
+   ============================================================ */
+function setWidth(w) {
+  w = Math.max(16, Math.min(8000, Math.round(+w) || 16));
+  state.w = w; state.h = Math.round(w * ASPECT);
+  $("w").value = state.w; $("h").value = state.h; render();
+}
+function setHeight(h) {
+  h = Math.max(12, Math.min(6000, Math.round(+h) || 12));
+  state.h = h; state.w = Math.round(h / ASPECT);
+  $("w").value = state.w; $("h").value = state.h; render();
+}
+$("w").onchange = (e) => setWidth(e.target.value);
+$("h").onchange = (e) => setHeight(e.target.value);
+$("w").oninput = (e) => { if (+e.target.value >= 16) { state.w = Math.round(+e.target.value); state.h = Math.round(state.w * ASPECT); $("h").value = state.h; $("caption").textContent = `Live preview · exports at ${state.w} × ${state.h} px`; } };
+$("h").oninput = (e) => { if (+e.target.value >= 12) { state.h = Math.round(+e.target.value); state.w = Math.round(state.h / ASPECT); $("w").value = state.w; $("caption").textContent = `Live preview · exports at ${state.w} × ${state.h} px`; } };
+EXPORT_PRESETS.forEach(([w, label]) => {
+  const b = document.createElement("button"); b.textContent = label.includes("×") ? label : `${w} × ${Math.round(w * ASPECT)}`;
+  b.onclick = () => setWidth(w); $("presets").appendChild(b);
+});
+
+$("download").onclick = async () => {
+  const st = $("export-status"), btn = $("download");
+  st.classList.remove("err"); btn.disabled = true; st.textContent = "Rendering…";
+  try {
+    const W = state.w, H = state.h;
+    if (W * H > 48e6) throw new Error("That size is too large for the browser — try a smaller width.");
+    const svg = buildSvg(state, W, H, "ex");
+    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error("Couldn’t render the thumbnail.")); img.src = url; });
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    cv.getContext("2d").drawImage(img, 0, 0, W, H);
+    URL.revokeObjectURL(url);
+    const blob = await new Promise((res) => cv.toBlob(res, "image/png"));
+    if (!blob) throw new Error("PNG export failed.");
+    const a = document.createElement("a");
+    const slug = state.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "icon";
+    a.href = URL.createObjectURL(blob); a.download = `gigadat-thumbnail-${slug}-${W}x${H}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    st.textContent = `Saved ${a.download}`;
+  } catch (e) { st.classList.add("err"); st.textContent = e.message; }
+  btn.disabled = false;
+};
+
+/* ---------- go ---------- */
+render();
+runSearch(true);
+</script>
+</body>
+</html>
