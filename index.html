@@ -82,6 +82,12 @@
   .picked .chip svg { width: 26px; height: 26px; }
   .picked b { color: var(--ink); font-weight: 600; display: block; }
 
+  .styles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .style { font: inherit; color: var(--ink); background: var(--field); border: 1.5px solid var(--line); border-radius: 12px; padding: 6px 6px 9px; cursor: pointer; display: grid; gap: 7px; text-align: center; font-weight: 500; font-size: 12px; }
+  .style:hover { border-color: var(--muted); }
+  .style[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+  .thumb { aspect-ratio: 4 / 3; border-radius: 7px; overflow: hidden; background: #888; }
+  .thumb svg { display: block; width: 100%; height: 100%; }
   .swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .swatch {
     width: 34px; height: 34px; border-radius: 9px; border: 2px solid transparent; cursor: pointer; padding: 0;
@@ -143,7 +149,15 @@
     </div>
 
     <section>
-      <h2>1 · Icon</h2>
+      <h2>1 · Style</h2>
+      <div class="styles" role="radiogroup" aria-label="Thumbnail style">
+        <button class="style" role="radio" aria-checked="true" data-style="glass"><div class="thumb" id="th-glass"></div><span>Glass Icons</span></button>
+        <button class="style" role="radio" aria-checked="false" data-style="iso"><div class="thumb" id="th-iso"></div><span>Isometric Icons</span></button>
+      </div>
+    </section>
+
+    <section>
+      <h2>2 · Icon</h2>
       <div class="tabs" role="tablist">
         <button role="tab" id="tab-describe" aria-selected="true" aria-controls="pane-describe">Describe</button>
         <button role="tab" id="tab-upload" aria-selected="false" aria-controls="pane-upload">Upload SVG</button>
@@ -171,16 +185,16 @@
     </section>
 
     <section>
-      <h2>2 · Colour</h2>
+      <h2>3 · Colour</h2>
       <div class="swatches" id="swatches" role="group" aria-label="Colour presets"></div>
       <div class="row">
-        <div class="color"><input type="color" id="c-top" value="#EEA906" aria-label="Top colour"><div><label for="c-top">Top</label><code id="c-top-v">#EEA906</code></div></div>
-        <div class="color"><input type="color" id="c-bot" value="#713F12" aria-label="Bottom colour"><div><label for="c-bot">Bottom glow</label><code id="c-bot-v">#713F12</code></div></div>
+        <div class="color"><input type="color" id="c-top" value="#EEA906" aria-label="Top colour"><div><label for="c-top" id="l-top">Top</label><code id="c-top-v">#EEA906</code></div></div>
+        <div class="color"><input type="color" id="c-bot" value="#713F12" aria-label="Bottom colour"><div><label for="c-bot" id="l-bot">Bottom glow</label><code id="c-bot-v">#713F12</code></div></div>
       </div>
     </section>
 
     <section>
-      <h2>3 · Icon size</h2>
+      <h2>4 · Icon size</h2>
       <div class="slider">
         <input type="range" id="size" min="40" max="170" step="1" value="85" aria-label="Icon size">
         <output id="size-out">27%</output>
@@ -188,7 +202,7 @@
     </section>
 
     <section>
-      <h2>4 · Export PNG</h2>
+      <h2>5 · Export PNG</h2>
       <div class="size">
         <div><label for="w">Width (px)</label><input type="number" id="w" min="16" max="8000" value="1200"></div>
         <div class="x" aria-hidden="true">×</div>
@@ -340,7 +354,7 @@ function measure(icon) {
 /* ============================================================
    Thumbnail SVG builder (used for preview AND for PNG export)
    ============================================================ */
-function buildSvg(state, outW, outH, idp = "t") {
+function buildGlass(state, outW, outH, idp = "t") {
   const b = state.bbox;
   const s = state.size / Math.max(b.w, b.h);          // fit icon's longest side to `size`
   const k = state.size / DEFAULT_ICON;                // scale shadow stack + glass details with the icon
@@ -401,6 +415,180 @@ ${blobLayers}
 }
 
 /* ============================================================
+   STYLE 2 — Isometric Icons  (Figma "Blogs" → Style 2, node 13:22)
+   Dark background · rounded isometric tile · soft radial glow · the icon stands on the tile as a wall-plane
+   face (white→accent gradient, 3 px blur) with a white extrusion behind it, and any cut-outs filled with the accent.
+   ============================================================ */
+const ISO = {
+  tile: { s: 99.52915, r: 12, m: [0.8320503, 0.5547001, -0.8301392, 0.5575562, 155.25, 94.64881] },
+  glow: { x: 78.49805, y: 18.31689, w: 153.75757, h: 131.68603, cx: 155.3768, cy: 154.5705, rx: 121.8363, ry: 134.166, stop: 0.216 },
+  shear: [0.8320503, -0.5547002],      // icon x-axis runs along the 33.69° isometric edge, y stays vertical
+  anchor: [162.9456, 121.6486],        // where the icon's centre sits on the frame
+  ref: 69.42747,                       // longest side of the template icon face (default size)
+  E: [-7.37, -3.87],                   // extrusion vector at default size (back face is up-left of the face)
+  blur: 1.5,                           // Figma layer blur radius 3 → sigma 1.5, but PROGRESSIVE (see below)
+  // Progressive blur: radius 0 at `from`, full at `to` (offsets are fractions of each layer's own box), crisp before / blurred after.
+  faceBlur: { from: [0.5343423, 0.6395059], to: [0.1321797, 0.8864645] },   // box = icon in its own (pre-transform) space
+  backBlur: { from: [0.5401306, 0.3256280], to: [-0.0683979, 0.8396979] },  // box = the extrusion's bounds on the frame
+  faceT: [-0.9235754, 0.6346363, 0.4915929, 0.3030848, -0.7735680, 0.9803098],   // Figma gradient transforms
+  backT: [-0.4141402, 0.9590253, 0.2762847, -0.9590253, -0.8478164, 1.1397930],
+};
+
+/* Figma gradientTransform (maps the node's 0‥1 box → gradient space, t = x) → SVG gradientTransform for a unit x-axis gradient. */
+function gradXform(T, box) {
+  const [a, c, e, b, d, f] = T, det = a * d - b * c;
+  const i11 = d / det, i12 = -c / det, i21 = -b / det, i22 = a / det;
+  const m13 = -(i11 * e + i12 * f), m23 = -(i21 * e + i22 * f);
+  return `matrix(${num(box.w * i11)} ${num(box.h * i21)} ${num(box.w * i12)} ${num(box.h * i22)} ${num(box.x + box.w * m13)} ${num(box.y + box.h * m23)})`;
+}
+
+/* Tight bounds of an icon after a transform — sampled along its outlines (getBBox would only transform the box corners). */
+function iconSamples(icon) {
+  if (icon.samples) return icon.samples;
+  const pts = [];
+  measurer.innerHTML = `<g>${icon.inner}</g>`;
+  measurer.querySelectorAll("path,circle,ellipse,rect,polygon,polyline,line").forEach((el) => {
+    if (typeof el.getTotalLength !== "function") return;
+    try {
+      const L = el.getTotalLength(), n = Math.max(24, Math.min(400, Math.round(L * 4)));
+      for (let i = 0; i <= n; i++) { const p = el.getPointAtLength((L * i) / n); pts.push([p.x, p.y]); }
+    } catch (e) { /* skip */ }
+  });
+  measurer.innerHTML = "";
+  return (icon.samples = pts);
+}
+function boundsUnder(icon, M, fallback) {
+  const pts = iconSamples(icon);
+  if (!pts.length) return fallback;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const [x, y] of pts) {
+    const X = M[0] * x + M[2] * y + M[4], Y = M[1] * x + M[3] * y + M[5];
+    if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y;
+  }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+/* Cut-outs: find the enclosed regions of a filled icon (e.g. the "!" in a warning sign) with a raster flood fill,
+   and keep them as a white-on-transparent bitmap in icon coordinates. */
+async function ensureHoles(icon) {
+  if (icon.holes !== undefined) return icon.holes;
+  icon.holes = null;
+  if (icon.stroke) return null;                                   // outline icons stay outlines
+  try {
+    const b = measure(icon), p = Math.max(b.w, b.h) * 0.03;
+    const X = b.x - p, Y = b.y - p, W = b.w + 2 * p, H = b.h + 2 * p, R = 720;
+    const cw = Math.max(8, Math.round((W / Math.max(W, H)) * R)), ch = Math.max(8, Math.round((H / Math.max(W, H)) * R));
+    const svg = `<svg xmlns="${NS}" width="${cw}" height="${ch}" viewBox="${X} ${Y} ${W} ${H}" preserveAspectRatio="none">${paintGroup(icon, 1)}</svg>`;
+    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    URL.revokeObjectURL(url);
+    const cv = document.createElement("canvas"); cv.width = cw; cv.height = ch;
+    const g = cv.getContext("2d", { willReadFrequently: true }); g.drawImage(img, 0, 0, cw, ch);
+    const px = g.getImageData(0, 0, cw, ch), A = px.data, ink = new Uint8Array(cw * ch);
+    for (let i = 0; i < ink.length; i++) ink[i] = A[i * 4 + 3] >= 128 ? 1 : 0;
+    const out = new Uint8Array(cw * ch), stack = [];                // out = 1 → reachable from the border (outside the icon)
+    const push = (i) => { if (!ink[i] && !out[i]) { out[i] = 1; stack.push(i); } };
+    for (let x = 0; x < cw; x++) { push(x); push((ch - 1) * cw + x); }
+    for (let y = 0; y < ch; y++) { push(y * cw); push(y * cw + cw - 1); }
+    while (stack.length) {
+      const i = stack.pop(), x = i % cw, y = (i / cw) | 0;
+      if (x > 0) push(i - 1); if (x < cw - 1) push(i + 1); if (y > 0) push(i - cw); if (y < ch - 1) push(i + cw);
+    }
+    let holes = new Uint8Array(cw * ch), count = 0;
+    for (let i = 0; i < holes.length; i++) if (!ink[i] && !out[i]) { holes[i] = 1; count++; }
+    if (count < 4) return null;
+    const grown = holes.slice();                                    // grow 1px into the ink so no seam shows
+    for (let y = 1; y < ch - 1; y++) for (let x = 1; x < cw - 1; x++) {
+      const i = y * cw + x;
+      if (holes[i - 1] || holes[i + 1] || holes[i - cw] || holes[i + cw]) grown[i] = 1;
+    }
+    const o = g.createImageData(cw, ch);
+    for (let i = 0; i < grown.length; i++) if (grown[i]) { o.data[i * 4] = o.data[i * 4 + 1] = o.data[i * 4 + 2] = 255; o.data[i * 4 + 3] = 255; }
+    g.clearRect(0, 0, cw, ch); g.putImageData(o, 0, 0);
+    return (icon.holes = { href: cv.toDataURL("image/png"), x: X, y: Y, w: W, h: H });
+  } catch (e) { return null; }
+}
+
+function paintFill(icon, paint) {
+  return icon.stroke
+    ? `<g stroke="${paint}" fill="none" stroke-width="${esc(icon.strokeWidth || 2)}" stroke-linecap="${esc(icon.linecap || "round")}" stroke-linejoin="${esc(icon.linejoin || "round")}">${icon.inner}</g>`
+    : `<g fill="${paint}">${icon.inner}</g>`;
+}
+
+function buildIso(state, outW, outH, idp = "t") {
+  const id = (n) => `${idp}-${n}`;
+  const b = state.bbox, k = state.size / ISO.ref;
+  const s = state.size / Math.max(b.w, b.h);
+  const bcx = b.x + b.w / 2, bcy = b.y + b.h / 2;
+  const [sx, sy] = ISO.shear;
+  const F = [sx * s, sy * s, 0, s, 0, 0];                          // icon-local → frame (without translation)
+  F[4] = ISO.anchor[0] - F[0] * bcx - F[2] * bcy;
+  F[5] = ISO.anchor[1] - F[1] * bcx - F[3] * bcy;
+  const FM = `matrix(${F.map(num).join(" ")})`;
+  const Ex = ISO.E[0] * k, Ey = ISO.E[1] * k;
+  const fb = boundsUnder(state.icon, F, { x: 100, y: 90, w: 60, h: 80 });
+  const back = { x: fb.x + Ex, y: fb.y + Ey, w: fb.w, h: fb.h };    // Figma's "Union" box = the back face
+  const holes = state.icon.holes || null;
+  const blur = num(ISO.blur * k);
+  const t = ISO.tile, gl = ISO.glow;
+
+  // Progressive blur = sharp copy fading out while a blurred copy fades in along the Figma blur line.
+  // The two copies are added (plus-lighter inside an isolated group) so the cross-fade is an exact linear mix.
+  const mixDefs = (n, pb, box, xf) => {
+    const x1 = num(box.x + pb.from[0] * box.w), y1 = num(box.y + pb.from[1] * box.h);
+    const x2 = num(box.x + pb.to[0] * box.w),   y2 = num(box.y + pb.to[1] * box.h);
+    const grad = (suffix, c0, c1) =>
+      `<linearGradient id="${id(n + suffix + "g")}" gradientUnits="userSpaceOnUse" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"${xf ? ` gradientTransform="${xf}"` : ""}><stop offset="0" stop-color="${c0}"/><stop offset="1" stop-color="${c1}"/></linearGradient>` +
+      `<mask id="${id(n + suffix)}" maskUnits="userSpaceOnUse" x="-20" y="-20" width="${FW + 40}" height="${FH + 40}"><rect x="-20" y="-20" width="${FW + 40}" height="${FH + 40}" fill="url(#${id(n + suffix + "g")})"/></mask>`;
+    return grad("s", "#fff", "#000") + grad("b", "#000", "#fff");   // s = sharp weight (1→0), b = blurred weight (0→1)
+  };
+  const mixLayers = (n, content) =>
+    `<g style="isolation:isolate"><g mask="url(#${id(n + "s")})">${content}</g>` +
+    `<g style="mix-blend-mode:plus-lighter" mask="url(#${id(n + "b")})"><g filter="url(#${id("blur")})">${content}</g></g></g>`;
+
+  // sweep the icon from the face back along the extrusion vector (mask, so overlaps never build up opacity)
+  const N = Math.max(10, Math.min(48, Math.ceil(Math.hypot(Ex, Ey) / 0.3)));
+  let sweep = "";
+  for (let i = N - 1; i >= 0; i--) {
+    const f = i / (N - 1);
+    sweep += `<g transform="translate(${num(Ex * f)} ${num(Ey * f)})"><g transform="${FM}"><use href="#${id("sil")}"/></g></g>`;
+  }
+  const hole = holes ? `<image href="${holes.href}" x="${num(holes.x)}" y="${num(holes.y)}" width="${num(holes.w)}" height="${num(holes.h)}" preserveAspectRatio="none"/>` : "";
+
+  return `<svg xmlns="${NS}" width="${outW}" height="${outH}" viewBox="0 0 ${FW} ${FH}" fill="none">
+<defs>
+<clipPath id="${id("clip")}"><rect width="${FW}" height="${FH}"/></clipPath>
+<radialGradient id="${id("glow")}" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(${gl.cx} ${gl.cy}) scale(${gl.rx} ${gl.ry})"><stop offset="${gl.stop}" stop-color="${state.top}"/><stop offset="1" stop-color="${state.top}" stop-opacity="0"/></radialGradient>
+<linearGradient id="${id("fg")}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1" y2="0" gradientTransform="${gradXform(ISO.faceT, b)}"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="${state.top}"/></linearGradient>
+<linearGradient id="${id("bg")}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1" y2="0" gradientTransform="${gradXform(ISO.backT, back)}"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0.2"/></linearGradient>
+${mixDefs("fm", ISO.faceBlur, b, FM)}${mixDefs("bm", ISO.backBlur, back, null)}
+<filter id="${id("blur")}" x="-10" y="-10" width="${FW + 20}" height="${FH + 20}" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="${blur}"/></filter>
+<g id="${id("sil")}">${paintFill(state.icon, "#fff")}${hole}</g>
+<mask id="${id("sweep")}" maskUnits="userSpaceOnUse" x="-20" y="-20" width="${FW + 40}" height="${FH + 40}">${sweep}</mask>
+${holes ? `<mask id="${id("hm")}" maskUnits="userSpaceOnUse" x="${num(holes.x)}" y="${num(holes.y)}" width="${num(holes.w)}" height="${num(holes.h)}">${hole}</mask>` : ""}
+</defs>
+<g clip-path="url(#${id("clip")})">
+<rect width="${FW}" height="${FH}" fill="${state.bot}"/>
+<rect width="${t.s}" height="${t.s}" rx="${t.r}" transform="matrix(${t.m.join(" ")})" fill="${state.top}"/>
+<rect x="${gl.x}" y="${gl.y}" width="${gl.w}" height="${gl.h}" fill="url(#${id("glow")})"/>
+${mixLayers("bm", `<g mask="url(#${id("sweep")})"><rect x="-20" y="-20" width="${FW + 40}" height="${FH + 40}" fill="url(#${id("bg")})"/></g>`)}
+${mixLayers("fm", `<g transform="${FM}">${paintFill(state.icon, `url(#${id("fg")})`)}</g>`)}
+${holes ? `<g transform="${FM}"><rect x="${num(holes.x)}" y="${num(holes.y)}" width="${num(holes.w)}" height="${num(holes.h)}" fill="${state.top}" mask="url(#${id("hm")})"/></g>` : ""}
+</g>
+</svg>`;
+}
+
+/* ============================================================
+   Style dispatcher
+   ============================================================ */
+const STYLES = {
+  glass: { name: "Glass Icons",      size: DEFAULT_ICON, min: 40, max: 170, labels: ["Top", "Bottom glow"],            build: buildGlass },
+  iso:   { name: "Isometric Icons",  size: ISO.ref,      min: 35, max: 140, labels: ["Accent (tile & icon)", "Background"], build: buildIso },
+};
+function buildSvg(st, outW, outH, idp = "t") { return STYLES[st.style].build(st, outW, outH, idp); }
+
+/* ============================================================
    State + rendering
    ============================================================ */
 // Offline fallback so the page works before the icon API answers (Material Icons Round "warning").
@@ -410,12 +598,25 @@ const FALLBACK = {
 };
 const state = {
   icon: FALLBACK, bbox: null, name: "warning", source: "Material Icons · Round (filled)",
+  style: "glass", sizes: { glass: DEFAULT_ICON, iso: ISO.ref }, rev: 0,
   top: "#EEA906", bot: "#713F12", size: DEFAULT_ICON, w: 1200, h: 900,
 };
 state.bbox = measure(state.icon);
 
+let thumbKey = "";
 function render() {
+  if (state.style === "iso" && state.icon.holes === undefined) ensureHoles(state.icon).then(render);
   $("frame").innerHTML = buildSvg(state, "100%", "100%", "pv");
+  const tk = [state.rev, state.top, state.bot, state.icon.holes === undefined].join("|");
+  if (tk !== thumbKey) {                                   // style thumbnails show the current icon + colours
+    thumbKey = tk;
+    if (state.icon.holes === undefined) ensureHoles(state.icon).then(() => { thumbKey = ""; render(); });
+    Object.keys(STYLES).forEach((key) => {
+      $("th-" + key).innerHTML = buildSvg({ ...state, style: key, size: STYLES[key].size }, "100%", "100%", "th" + key);
+    });
+  }
+  document.querySelectorAll(".style").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.style === state.style)));
+  $("l-top").textContent = STYLES[state.style].labels[0]; $("l-bot").textContent = STYLES[state.style].labels[1];
   $("caption").textContent = `Live preview · exports at ${state.w} × ${state.h} px`;
   $("size-out").textContent = Math.round((state.size / FW) * 100) + "%";
   $("c-top-v").textContent = state.top.toUpperCase();
@@ -430,7 +631,7 @@ function render() {
 }
 
 function setIcon(icon, name, source) {
-  state.icon = icon; state.bbox = measure(icon); state.name = name; state.source = source;
+  state.icon = icon; state.bbox = measure(icon); state.name = name; state.source = source; state.rev++;
   render();
 }
 
@@ -444,7 +645,15 @@ PRESETS.forEach((p, i) => {
 });
 $("c-top").oninput = (e) => { state.top = e.target.value; render(); };
 $("c-bot").oninput = (e) => { state.bot = e.target.value; render(); };
-$("size").oninput = (e) => { state.size = +e.target.value; render(); };
+$("size").oninput = (e) => { state.size = +e.target.value; state.sizes[state.style] = state.size; render(); };
+document.querySelectorAll(".style").forEach((b) => {
+  b.onclick = () => {
+    state.sizes[state.style] = state.size;
+    state.style = b.dataset.style; state.size = state.sizes[state.style];
+    const S = STYLES[state.style]; $("size").min = S.min; $("size").max = S.max; $("size").value = state.size;
+    render();
+  };
+});
 
 /* ---------- tabs ---------- */
 function selectTab(which) {
@@ -634,6 +843,7 @@ $("download").onclick = async () => {
   try {
     const W = state.w, H = state.h;
     if (W * H > 48e6) throw new Error("That size is too large for the browser — try a smaller width.");
+    if (state.style === "iso") await ensureHoles(state.icon);
     const svg = buildSvg(state, W, H, "ex");
     const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
     const img = new Image();
@@ -645,7 +855,7 @@ $("download").onclick = async () => {
     if (!blob) throw new Error("PNG export failed.");
     const a = document.createElement("a");
     const slug = state.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "icon";
-    a.href = URL.createObjectURL(blob); a.download = `gigadat-thumbnail-${slug}-${W}x${H}.png`;
+    a.href = URL.createObjectURL(blob); a.download = `gigadat-thumbnail-${state.style}-${slug}-${W}x${H}.png`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     st.textContent = `Saved ${a.download}`;
